@@ -50,20 +50,20 @@ dsh --profile <你的profile> --dump-config   # 插件树中应出现 id: billin
 把下面整段复制发给任意 AI 助手（Claude Code / Codex / dsh 自身），它会替你完成安装与配置（已按 102 服务器实测通过）：
 
 ````markdown
-请帮我安装并配置 dsh-billing（DeepSeek Harness 实时计费插件）：
+请帮我安装并配置 dsh-billing（DeepSeek Harness 实时计费插件），profile 为 web：
 
 1. 下载插件产物到服务器临时目录：
    curl -LO https://github.com/imeepos/dsh-billing-plugin/releases/latest/download/dsh-billing-0.1.0.tgz
    （如果该 URL 不可达，提示我先把 dsh-billing-0.1.0.tgz 传到这台机器再继续）
 
-2. 在 dsh profile 目录安装（例如 headless profile）：
-   cd ~/.dsh/profiles/<你的profile>
+2. 在 web profile 目录安装：
+   cd ~/.dsh/profiles/web
    cp /tmp/dsh-billing-0.1.0.tgz .
    npm install ./dsh-billing-0.1.0.tgz
-   检查 ~/.dsh/profiles/<你的profile>/package.json 的 dependencies 出现
+   检查 ~/.dsh/profiles/web/package.json 的 dependencies 出现
    "dsh-billing": "file:dsh-billing-0.1.0.tgz"
 
-3. 编辑 ~/.dsh/profiles/<你的profile>/cordis.patch.yml，在末尾追加
+3. 编辑 ~/.dsh/profiles/web/cordis.patch.yml，在末尾追加
    （如果文件内容只是注释，把注释删掉换成下面的内容；注意必须用 insert 列表语法）：
 
    - insert:
@@ -80,7 +80,7 @@ dsh --profile <你的profile> --dump-config   # 插件树中应出现 id: billin
                offPeak: { inputPerMillion: 4.5, outputPerMillion: 13.5, cacheReadPerMillion: 0.15 }
                peak: { inputPerMillion: 9.0, outputPerMillion: 27.0, cacheReadPerMillion: 0.30 }
 
-4. 验证挂载：dsh --profile <你的profile> --dump-config
+4. 验证挂载：dsh --profile web --dump-config
    插件树中应出现 id: billing（来源 cordis.patch.yml）。
 
 5. 如果第 4 步报 patch: entry "billing" not found，

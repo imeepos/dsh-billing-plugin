@@ -56,14 +56,14 @@ Please install and configure dsh-billing (the DeepSeek Harness real-time billing
    curl -LO https://github.com/imeepos/dsh-billing-plugin/releases/latest/download/dsh-billing-0.1.0.tgz
    (If this URL is unreachable, ask me to transfer dsh-billing-0.1.0.tgz to the machine first)
 
-2. Install into the dsh profile directory (e.g. the headless profile):
-   cd ~/.dsh/profiles/<your-profile>
+2. Install into the web profile directory:
+   cd ~/.dsh/profiles/web
    cp /tmp/dsh-billing-0.1.0.tgz .
    npm install ./dsh-billing-0.1.0.tgz
-   Check that ~/.dsh/profiles/<your-profile>/package.json now has
+   Check that ~/.dsh/profiles/web/package.json now has
    "dsh-billing": "file:dsh-billing-0.1.0.tgz" in dependencies.
 
-3. Edit ~/.dsh/profiles/<your-profile>/cordis.patch.yml and append
+3. Edit ~/.dsh/profiles/web/cordis.patch.yml and append
    (if the file only contains comments, replace them with the block below;
    the insert-list syntax is mandatory):
 
@@ -81,7 +81,7 @@ Please install and configure dsh-billing (the DeepSeek Harness real-time billing
                offPeak: { inputPerMillion: 4.5, outputPerMillion: 13.5, cacheReadPerMillion: 0.15 }
                peak: { inputPerMillion: 9.0, outputPerMillion: 27.0, cacheReadPerMillion: 0.30 }
 
-4. Verify the mount: dsh --profile <your-profile> --dump-config
+4. Verify the mount: dsh --profile web --dump-config
    An id: billing entry should appear in the plugin tree (sourced from cordis.patch.yml).
 
 5. If step 4 fails with `patch: entry "billing" not found`,
