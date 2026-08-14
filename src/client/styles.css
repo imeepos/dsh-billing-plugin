@@ -1,0 +1,3 @@
+/* Tailwind entry for the billing widget client bundle. Only the utilities
+ * actually used in src/client/index.tsx are emitted. */
+@tailwind utilities;

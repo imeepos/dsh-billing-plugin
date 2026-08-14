@@ -4,7 +4,7 @@
   name: dsh-billing
   config:
       currency: CNY
-      budget: 0.05                      # 每 session 硬上限 5 分钱
+      budget: 0.05                      # 每 session 预算：仅作为账单字段供 UI 展示，不注入上下文
       prices:
         deepseek-v4-flash:
           offPeak:                      # 空闲时段：价格为高峰的一半

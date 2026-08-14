@@ -63,7 +63,7 @@ export interface Config {
   peakWindows?: PeakWindow[]
   /** Clock offset east of UTC in minutes for bucket selection; defaults to 480 (Beijing, UTC+8, no DST). */
   utcOffsetMinutes?: number
-  /** Optional per-session hard spend cap in `currency`; must be positive when set. */
+  /** Optional per-session spend cap in `currency`; must be positive when set. It is a statistics field only — carried into `Bill.budget/remaining/exhausted` for UI display, with no guard, tool, or context injection. */
   budget?: number
 }
 

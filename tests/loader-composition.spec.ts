@@ -147,7 +147,9 @@ describe('dsh-billing real Loader composition through cordis.yml', () => {
     freezeBeijingClock('2026-08-17T10:00:00') // peak: 10:00 is inside 09:00–12:00
     const ctx = await boot(OFFICIAL_CONFIG)
     expect(ctx.get('billing')).toBeInstanceOf(BillingService)
-    expect(ctx.tools.schemas().some(s => s.name === 'billing_status')).toBe(true)
+    // Statistics-only contract: the plugin registers no model-visible tool,
+    // so nothing from it lands on the model context.
+    expect(ctx.tools.schemas().some(s => s.name === 'billing_status')).toBe(false)
 
     const owner = agentWithSession(ctx)
     appendUsageCall(owner.session, { inputTokens: 1_000_000, outputTokens: 500_000 })
@@ -157,18 +159,6 @@ describe('dsh-billing real Loader composition through cordis.yml', () => {
     expect(bill.currency).toBe('CNY')
     expect(bill.byBucket.peak.calls).toBe(1)
     expect(bill.byBucket.offPeak.calls).toBe(0)
-
-    // The model-facing tool reports the same Loader-derived bill end to end.
-    const result = await ctx.tools.execute({
-      signal: new AbortController().signal,
-      callId: 'billing-loader-1' as never,
-      name: 'billing_status',
-      arguments: {},
-      agent: owner,
-    })
-    expect(result.isError).toBe(false)
-    if (result.isError) throw new Error('expected billing_status success')
-    expect(result.value).toMatchObject({ cost: 7.5, currency: 'CNY', byBucket: { peak: { calls: 1 } } })
   })
 
   it('charges the same call at half the price when it lands in an off-peak hour', async () => {

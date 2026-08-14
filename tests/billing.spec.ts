@@ -1,20 +1,20 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId, createMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
-import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import InvariantRegistry, { InvariantError } from '@deepseek-ai/dsh-invariants'
 import BillingService from '../src/index.ts'
-import { bucketForTime, clockHour, priceBucket, priceCall } from '../src/index.ts'
+import {
+  bucketForTime, clockHour, priceBucket, priceCall,
+  initBillingProjectionState, applyBillingProjection, viewBillingProjection,
+} from '../src/index.ts'
 import type { Config, ModelPrice, PricingPolicy } from '../src/index.ts'
 import * as BillingInvariantCompanion from '../src/invariant.ts'
 import { MockAdapter, textResponse } from './mock-adapter.ts'
-
-const testToolSignal = new AbortController().signal
 
 /**
  * The official DeepSeek peak/off-peak table (announced for 2026-08-17 00:00
@@ -84,7 +84,7 @@ function appendUsageCall(
   session.append('step/end', { turn, step })
 }
 
-/** A parent Agent backed by a real Session — the tool reads `agent.session`. */
+/** A parent Agent backed by a real Session. */
 function agentWithSession(id = 'parent-1'): Agent & { session: Session } {
   const session = Session.create(SessionId(id))
   return { id: SessionId(id), session } as unknown as Agent & { session: Session }
@@ -105,13 +105,6 @@ function waitForIdle(ctx: Context, agent: Agent): Promise<void> {
       if (s === agent && st === 'idle') { d(); resolve() }
     })
   })
-}
-
-/** Every non-user-sourced user/message in the agent's log (injected contexts). */
-function injectedContexts(agent: Agent): SessionEvent<'user/message'>[] {
-  return [...agent.session.events]
-    .filter((e): e is SessionEvent<'user/message'> =>
-      e.type === 'user/message' && e.data.source.kind !== 'user')
 }
 
 describe('dsh-billing time-of-day pricing (pure)', () => {
@@ -265,67 +258,15 @@ describe('dsh-billing service (ctx.billing)', () => {
   })
 })
 
-describe('dsh-billing model-facing tool (billing_status)', () => {
-  it('registers a tool whose schema reads no arguments', async () => {
+describe('dsh-billing statistics-only contract (no model-context injection)', () => {
+  it('registers no model-visible tool', async () => {
     const ctx = await harness({ prices: DEEPSEEK_PRICES })
-    const schema = ctx.tools.schemas().find(s => s.name === 'billing_status')
-    expect(schema).toBeDefined()
-    expect(Object.keys((schema!.parameters as { properties?: object }).properties ?? {})).toEqual([])
+    expect(ctx.tools.schemas().find(s => s.name === 'billing_status')).toBeUndefined()
   })
 
-  it('returns the current session bill through the real tool pipeline', async () => {
-    freezeBeijingClock('2026-08-17T10:00:00') // peak — 1M in @3.0 + 0.5M out @9.0 + 0.2M cache-read @0.10 = 7.52
-    const ctx = await harness({ prices: DEEPSEEK_PRICES, budget: 10 })
-    const agent = agentWithSession('tool')
-    appendUsageCall(agent.session, 1, 1, 'deepseek-v4-flash', USAGE)
-
-    const result = await ctx.tools.execute({
-      signal: testToolSignal,
-      callId: CallId('billing-1'),
-      name: 'billing_status',
-      arguments: {},
-      agent,
-    })
-    expect(result.isError).toBe(false)
-    if (result.isError) throw new Error('expected billing_status success')
-    expect(result.value).toMatchObject({
-      currency: 'CNY',
-      calls: 1,
-      inputTokens: 1_000_000,
-      outputTokens: 500_000,
-      cost: 7.52,
-      budget: 10,
-      remaining: 2.48,
-      exhausted: false,
-      byBucket: {
-        peak: { calls: 1, cost: 7.52, inputTokens: 1_000_000, outputTokens: 500_000 },
-        offPeak: { calls: 0, cost: 0, inputTokens: 0, outputTokens: 0 },
-      },
-      byModel: [{ model: 'deepseek-v4-flash', calls: 1, cost: 7.52 }],
-    })
-    const rendered = result.content.filter(b => b.type === 'text').map(b => b.text).join('')
-    expect(rendered).toContain('7.52 CNY')
-    expect(rendered).toContain('peak 1 call(s) 7.52')
-    expect(rendered).toContain('remaining 2.48')
-  })
-
-  it('rejects a call with no owning agent session', async () => {
-    const ctx = await harness({ prices: DEEPSEEK_PRICES })
-    const result = await ctx.tools.execute({
-      signal: testToolSignal,
-      callId: CallId('billing-null'),
-      name: 'billing_status',
-      arguments: {},
-    })
-    expect(result.isError).toBe(true)
-  })
-})
-
-describe('dsh-billing budget guard (policy role)', () => {
-  it('stops the loop with a durable notice once spend reaches the budget', async () => {
-    freezeBeijingClock('2026-08-17T10:00:00') // peak rate: 1M in @3.0 → cost 3.0 > budget
+  it('injects nothing into the conversation when the budget is exceeded', async () => {
+    freezeBeijingClock('2026-08-17T10:00:00') // peak rate: 1M in @3.0 → cost 3.0 > tiny budget
     const ctx = await harness({ prices: DEEPSEEK_PRICES, budget: 0.0001 })
-    // First call spends far over the budget; second text response must never run.
     const adapter = new MockAdapter([
       (): Awaited<ReturnType<typeof textResponse>> => [
         { type: 'block-start', index: 0, blockType: 'text' },
@@ -334,40 +275,57 @@ describe('dsh-billing budget guard (policy role)', () => {
         { type: 'usage', usage: { inputTokens: 1_000_000, outputTokens: 0 } },
         { type: 'finish', reason: { kind: 'stop' } },
       ],
-      textResponse('should never be reached'),
+      textResponse('still running'),
     ])
     ctx.llm.registerAdapter(['mock'], adapter)
-    const agent = ctx.agentLoop.create(SessionId('guard'), { provider: 'mock', model: 'deepseek-v4-flash' })
+    const agent = ctx.agentLoop.create(SessionId('stats-only'), { provider: 'mock', model: 'deepseek-v4-flash' })
 
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await waitForIdle(ctx, agent)
     expect(ctx.billing.spend(agent.session).exhausted).toBe(true)
 
-    // The next turn is rejected before any model call: no new assistant/message.
+    // The loop keeps running, and the log gains no plugin-sourced message:
+    // overage is visible on the UI surface, never in the conversation.
     const assistantBefore = agent.session.events.filter(e => e.type === 'assistant/message').length
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'again' }], source: { kind: 'user' } }))
     await waitForIdle(ctx, agent)
-    expect(agent.session.events.filter(e => e.type === 'assistant/message').length).toBe(assistantBefore)
-    expect(adapter.requests).toHaveLength(1) // the second response never streamed
+    expect(agent.session.events.filter(e => e.type === 'assistant/message').length).toBe(assistantBefore + 1)
+    expect(adapter.requests).toHaveLength(2) // the second response streamed
+    expect(agent.session.events.filter(e =>
+      e.type === 'user/message' && e.data.source.kind !== 'user')).toHaveLength(0)
+  })
+})
 
-    // The durable notice explains the block; it is appended exactly once.
-    const notices = injectedContexts(agent)
-    expect(notices).toHaveLength(1)
-    expect(notices[0]!.data.content.map(b => b.type === 'text' ? b.text : '').join(''))
-      .toContain('budget exhausted')
-    expect(notices[0]!.data.source).toMatchObject({ kind: 'plugin', plugin: 'dsh-billing' })
+describe('dsh-billing projection (client data channel)', () => {
+  it('folds usage into a JSON-safe bill value with per-type breakdown', () => {
+    freezeBeijingClock('2026-08-17T10:00:00') // peak — flash: 1M in @3.0 + 0.5M out @9.0 + 0.2M cache-read @0.10 = 7.52
+    const owner = agentWithSession('projection')
+    appendUsageCall(owner.session, 1, 1, 'deepseek-v4-flash', USAGE)
+    let state = initBillingProjectionState()
+    for (const ev of owner.session.events) state = applyBillingProjection(state, ev, POLICY)
+    const value = viewBillingProjection(state, 'CNY', 10)
+    expect(value.calls).toBe(1)
+    expect(value.cost).toBe(7.52)
+    expect(value.peakCost).toBe(7.52)
+    expect(value.offPeakCost).toBe(0)
+    expect(value.budget).toBe(10)
+    expect(value.remaining).toBe(2.48)
+    expect(value.exhausted).toBe(false)
+    // Per-type: cache-read 0.2M @0.10 = 0.02, uncached input 1M @3.0 = 3.0, output 0.5M @9.0 = 4.5.
+    expect(value.breakdown).toEqual({ cacheRead: 0.02, cacheMiss: 3.0, output: 4.5 })
   })
 
-  it('delegates normally while spend is under the budget', async () => {
-    freezeBeijingClock('2026-08-17T13:00:00') // off-peak
-    const ctx = await harness({ prices: DEEPSEEK_PRICES, budget: 100 })
-    const adapter = new MockAdapter([textResponse('cheap')])
-    ctx.llm.registerAdapter(['mock'], adapter)
-    const agent = ctx.agentLoop.create(SessionId('under'), { provider: 'mock', model: 'deepseek-v4-flash' })
-    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
-    await waitForIdle(ctx, agent)
-    expect(ctx.billing.spend(agent.session).exhausted).toBe(false)
-    expect(injectedContexts(agent)).toHaveLength(0)
+  it('marks exhausted and omits budget fields when none is configured', () => {
+    freezeBeijingClock('2026-08-17T10:00:00')
+    const owner = agentWithSession('projection-exhausted')
+    appendUsageCall(owner.session, 1, 1, 'deepseek-v4-flash', USAGE)
+    let state = initBillingProjectionState()
+    for (const ev of owner.session.events) state = applyBillingProjection(state, ev, POLICY)
+    expect(viewBillingProjection(state, 'CNY', 7).exhausted).toBe(true) // 7.52 >= 7
+    const noBudget = viewBillingProjection(state, 'CNY', undefined)
+    expect(noBudget.budget).toBeUndefined()
+    expect(noBudget.remaining).toBeUndefined()
+    expect(noBudget.exhausted).toBe(false)
   })
 })
 

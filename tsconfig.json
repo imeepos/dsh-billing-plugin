@@ -20,5 +20,5 @@
     "outDir": "lib/types"
   },
   "include": ["src"],
-  "exclude": ["node_modules", "lib", "tests"]
+  "exclude": ["node_modules", "lib", "tests", "src/client"]
 }
