@@ -29,12 +29,14 @@ npm install ./dsh-billing-0.1.0.tgz
       name: dsh-billing
       config:
         currency: CNY
-        budget: 0.05                      # 每 session 预算
+        budget: 5.0                       # 每 session 预算（元），仅 UI 展示，不做限制
         prices:
           deepseek-v4-flash:
+            effectiveFrom: 1786896000000  # 2026-08-17 00:00 北京时间，此前的调用按 0 元计费
             offPeak: { inputPerMillion: 1.5, outputPerMillion: 4.5, cacheReadPerMillion: 0.05 }
             peak:    { inputPerMillion: 3.0, outputPerMillion: 9.0, cacheReadPerMillion: 0.10 }
           deepseek-v4-pro:
+            effectiveFrom: 1786896000000  # 同上
             offPeak: { inputPerMillion: 4.5, outputPerMillion: 13.5, cacheReadPerMillion: 0.15 }
             peak:    { inputPerMillion: 9.0, outputPerMillion: 27.0, cacheReadPerMillion: 0.30 }
 ```
@@ -71,12 +73,14 @@ dsh --profile <你的profile> --dump-config   # 插件树中应出现 id: billin
          name: dsh-billing
          config:
            currency: CNY
-           budget: 0.05
+           budget: 5.0
            prices:
              deepseek-v4-flash:
+               effectiveFrom: 1786896000000
                offPeak: { inputPerMillion: 1.5, outputPerMillion: 4.5, cacheReadPerMillion: 0.05 }
                peak: { inputPerMillion: 3.0, outputPerMillion: 9.0, cacheReadPerMillion: 0.10 }
              deepseek-v4-pro:
+               effectiveFrom: 1786896000000
                offPeak: { inputPerMillion: 4.5, outputPerMillion: 13.5, cacheReadPerMillion: 0.15 }
                peak: { inputPerMillion: 9.0, outputPerMillion: 27.0, cacheReadPerMillion: 0.30 }
 

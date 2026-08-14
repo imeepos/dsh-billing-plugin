@@ -5,9 +5,10 @@
       name: dsh-billing
       config:
           currency: CNY
-          budget: 0.05                      # 每 session 预算：仅作为账单字段供 UI 展示，不注入上下文
+          budget: 5.0                       # 每 session 预算（元）：仅作为账单字段供 UI 展示，不注入上下文
           prices:
             deepseek-v4-flash:
+              effectiveFrom: 1786896000000  # 2026-08-17 00:00 北京时间，此前的调用按 0 元计费
               offPeak:                      # 空闲时段：价格为高峰的一半
                 inputPerMillion: 1.5        #   缓存未命中输入
                 outputPerMillion: 4.5       #   输出
@@ -17,6 +18,7 @@
                 outputPerMillion: 9.0
                 cacheReadPerMillion: 0.10
             deepseek-v4-pro:
+              effectiveFrom: 1786896000000  # 同上
               offPeak:
                 inputPerMillion: 4.5
                 outputPerMillion: 13.5

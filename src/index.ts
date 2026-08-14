@@ -122,8 +122,16 @@ export class BillingService extends Service {
     if (!Number.isFinite(utcOffsetMinutes)) {
       throw new Error(`dsh-billing: utcOffsetMinutes must be a finite number (got ${utcOffsetMinutes})`)
     }
+    const prices = config.prices as Record<string, ModelPrice> | undefined
+    if (prices) {
+      for (const [model, price] of Object.entries(prices)) {
+        if (price.effectiveFrom === undefined) {
+          ctx.logger?.warn?.(`dsh-billing: model "${model}" has no effectiveFrom — ALL calls (including past ones) are priced at the current table. Set effectiveFrom to a Unix-epoch ms timestamp to gate the table.`)
+        }
+      }
+    }
     this.policy = {
-      prices: config.prices as Record<string, ModelPrice>,
+      prices: prices ?? {},
       peakWindows,
       utcOffsetMinutes,
     }

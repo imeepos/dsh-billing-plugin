@@ -36,6 +36,10 @@ export interface BillingProjectionState {
   cacheReadCost: number
   cacheMissCost: number
   outputCost: number
+  /** Number of calls priced at zero (before effectiveFrom or unpriced model). */
+  zeroPricedCalls: number
+  /** Earliest effectiveFrom across all models that have priced calls (Unix epoch ms). */
+  effectiveFrom: number | undefined
 }
 
 /** Wire value shipped to the client under the `billing` projection key. */
@@ -59,6 +63,10 @@ export interface BillingProjectionValue {
     cacheMiss: number
     output: number
   }
+  /** Unix epoch ms before which the price table was not yet in effect (earliest across models), or undefined when no model sets one. */
+  effectiveFrom: number | undefined
+  /** Number of calls priced at zero (before effectiveFrom or unpriced model). */
+  zeroPricedCalls: number
 }
 
 /** Zod schema for the wire value (validated before it leaves the host). */
@@ -80,6 +88,8 @@ export const billingProjectionSchema = z.object({
     cacheMiss: z.number(),
     output: z.number(),
   }),
+  effectiveFrom: z.number().optional().nullable(),
+  zeroPricedCalls: z.number(),
 }) as z.ZodType<BillingProjectionValue>
 
 /** The empty bill projection state. */
@@ -96,6 +106,8 @@ export function initBillingProjectionState(): BillingProjectionState {
     cacheReadCost: 0,
     cacheMissCost: 0,
     outputCost: 0,
+    zeroPricedCalls: 0,
+    effectiveFrom: undefined,
   }
 }
 
@@ -126,6 +138,9 @@ export function applyBillingProjection(
     { inputTokens: usage.inputTokens, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }, model, time, policy).cost
   const outputCost = priceCall(
     { inputTokens: 0, outputTokens: usage.outputTokens, cacheReadTokens: 0, cacheWriteTokens: 0 }, model, time, policy).cost
+  // Track the earliest effectiveFrom for this model.
+  const modelPrice = policy.prices[model]
+  const modelEffectiveFrom = modelPrice?.effectiveFrom
   return {
     ...state,
     calls: state.calls + 1,
@@ -139,6 +154,10 @@ export function applyBillingProjection(
     cacheReadCost: state.cacheReadCost + cacheReadCost,
     cacheMissCost: state.cacheMissCost + cacheMissCost,
     outputCost: state.outputCost + outputCost,
+    zeroPricedCalls: state.zeroPricedCalls + (cost === 0 ? 1 : 0),
+    effectiveFrom: modelEffectiveFrom !== undefined
+      ? (state.effectiveFrom === undefined ? modelEffectiveFrom : Math.min(state.effectiveFrom, modelEffectiveFrom))
+      : state.effectiveFrom,
   }
 }
 
@@ -164,6 +183,8 @@ export function viewBillingProjection(
       cacheMiss: roundCost(state.cacheMissCost),
       output: roundCost(state.outputCost),
     },
+    effectiveFrom: state.effectiveFrom,
+    zeroPricedCalls: state.zeroPricedCalls,
   }
   if (budget !== undefined) {
     value.budget = budget

@@ -34,6 +34,8 @@ interface BillingProjectionValue {
   peakCost: number
   offPeakCost: number
   breakdown: { cacheRead: number; cacheMiss: number; output: number }
+  effectiveFrom: number | undefined
+  zeroPricedCalls: number
 }
 
 /** The session-list store shape we read (narrow projection of the real store). */
@@ -56,11 +58,13 @@ const ZH: Record<string, string> = {
   costLabel: '费用', budgetLabel: '预算', remainingLabel: '剩',
   cacheHitLabel: '缓存命中', cacheMissLabel: '未命中', outputLabel: '输出',
   callsSuffix: '次', totalPrefix: '共', tokUnit: 'tok',
+  pricingSince: '价格生效于', zeroPricedHint: '次调用为零计费（生效前或未定价模型）',
 }
 const EN: Record<string, string> = {
   costLabel: 'Cost', budgetLabel: 'Budget', remainingLabel: 'Left',
   cacheHitLabel: 'Cache hit', cacheMissLabel: 'Miss', outputLabel: 'Output',
   callsSuffix: 'calls', totalPrefix: 'total', tokUnit: 'tok',
+  pricingSince: 'Price effective from', zeroPricedHint: 'call(s) priced at zero (pre-effective or unpriced model)',
 }
 
 /** 4-tier water colour by budget-consumed percentage. */
@@ -208,6 +212,16 @@ export function BillingFloat(props: SlotProps): React.ReactElement | null {
           <span>{translate('budgetLabel')} {fmt(bill.budget)} {bill.currency}</span>
           <span>{bill.calls} {translate('callsSuffix')} · {translate('totalPrefix')} {fmtCompact(totalTokens)} {translate('tokUnit')}</span>
         </div>
+        {bill.effectiveFrom !== undefined ? (
+          <div className="mt-1 text-[10px] text-label-secondary/60">
+            {translate('pricingSince')} {new Date(bill.effectiveFrom).toLocaleString()}
+          </div>
+        ) : null}
+        {bill.zeroPricedCalls > 0 ? (
+          <div className="mt-0.5 text-[10px] text-warn/80">
+            ⚠ {bill.zeroPricedCalls} {translate('zeroPricedHint')}
+          </div>
+        ) : null}
       </div>
     )
   }

@@ -29,12 +29,14 @@ Append the following to your profile's `cordis.patch.yml` (`~/.dsh/profiles/<you
       name: dsh-billing
       config:
         currency: CNY
-        budget: 0.05                      # per-session budget
+        budget: 5.0                       # per-session budget (CNY), UI display only
         prices:
           deepseek-v4-flash:
+            effectiveFrom: 1786896000000  # 2026-08-17 00:00 Beijing time; calls before this price at zero
             offPeak: { inputPerMillion: 1.5, outputPerMillion: 4.5, cacheReadPerMillion: 0.05 }
             peak:    { inputPerMillion: 3.0, outputPerMillion: 9.0, cacheReadPerMillion: 0.10 }
           deepseek-v4-pro:
+            effectiveFrom: 1786896000000  # same
             offPeak: { inputPerMillion: 4.5, outputPerMillion: 13.5, cacheReadPerMillion: 0.15 }
             peak:    { inputPerMillion: 9.0, outputPerMillion: 27.0, cacheReadPerMillion: 0.30 }
 ```
@@ -72,12 +74,14 @@ Please install and configure dsh-billing (the DeepSeek Harness real-time billing
          name: dsh-billing
          config:
            currency: CNY
-           budget: 0.05
+           budget: 5.0
            prices:
              deepseek-v4-flash:
+               effectiveFrom: 1786896000000
                offPeak: { inputPerMillion: 1.5, outputPerMillion: 4.5, cacheReadPerMillion: 0.05 }
                peak: { inputPerMillion: 3.0, outputPerMillion: 9.0, cacheReadPerMillion: 0.10 }
              deepseek-v4-pro:
+               effectiveFrom: 1786896000000
                offPeak: { inputPerMillion: 4.5, outputPerMillion: 13.5, cacheReadPerMillion: 0.15 }
                peak: { inputPerMillion: 9.0, outputPerMillion: 27.0, cacheReadPerMillion: 0.30 }
 
