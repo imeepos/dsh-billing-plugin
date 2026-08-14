@@ -32,9 +32,8 @@ npm run build   # tsc 产出 lib/
 
 ```yaml
 - id: billing
-  plugin:
-    name: "dsh-billing"
-    config:
+  name: dsh-billing
+  config:
       currency: CNY
       budget: 0.05
       prices:

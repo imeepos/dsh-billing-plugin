@@ -1,9 +1,8 @@
 # dsh-billing 挂载示例 —— 加到任意 profile 的 cordis.patch.yml 或你自己的 cordis.yml
 # 价格表：DeepSeek 官方峰谷价格（2026-08-17 00:00 北京时间生效）
 - id: billing
-  plugin:
-    name: "dsh-billing"
-    config:
+  name: dsh-billing
+  config:
       currency: CNY
       budget: 0.05                      # 每 session 硬上限 5 分钱
       prices:
