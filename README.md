@@ -15,34 +15,80 @@ curl -LO https://github.com/imeepos/dsh-billing-plugin/releases/latest/download/
 npm install ./dsh-billing-0.1.0.tgz
 ```
 
+> 注意：目标机器连不上 GitHub 时（如国内网络），可先从可达机器把 tarball 传过去，安装本身只依赖本地文件。
+
 > 从源码安装（开发用途）：`git clone <本仓库地址> && cd billing-plugin && npm install && npm run build && npm run build:client && npm install <路径>/dsh-billing-0.1.0.tgz`
 
 ## 配置
 
-在 profile 的 `cordis.patch.yml`（`~/.dsh/profiles/<你的profile>/`）中加入以下条目（完整示例见 [cordis.yml](cordis.yml)）：
+在 profile 的 `cordis.patch.yml`（`~/.dsh/profiles/<你的profile>/`）中追加（**必须用 `- insert:` 列表**，patch 层只能对已有条目覆盖，顶层直接写条目会报 `entry "billing" not found`）：
 
 ```yaml
-- id: billing
-  name: dsh-billing
-  config:
-      currency: CNY
-      budget: 0.05                      # 每 session 预算
-      prices:
-        deepseek-v4-flash:
-          offPeak: { inputPerMillion: 1.5, outputPerMillion: 4.5, cacheReadPerMillion: 0.05 }
-          peak:    { inputPerMillion: 3.0, outputPerMillion: 9.0, cacheReadPerMillion: 0.10 }
-        deepseek-v4-pro:
-          offPeak: { inputPerMillion: 4.5, outputPerMillion: 13.5, cacheReadPerMillion: 0.15 }
-          peak:    { inputPerMillion: 9.0, outputPerMillion: 27.0, cacheReadPerMillion: 0.30 }
+- insert:
+    - id: billing
+      name: dsh-billing
+      config:
+        currency: CNY
+        budget: 0.05                      # 每 session 预算
+        prices:
+          deepseek-v4-flash:
+            offPeak: { inputPerMillion: 1.5, outputPerMillion: 4.5, cacheReadPerMillion: 0.05 }
+            peak:    { inputPerMillion: 3.0, outputPerMillion: 9.0, cacheReadPerMillion: 0.10 }
+          deepseek-v4-pro:
+            offPeak: { inputPerMillion: 4.5, outputPerMillion: 13.5, cacheReadPerMillion: 0.15 }
+            peak:    { inputPerMillion: 9.0, outputPerMillion: 27.0, cacheReadPerMillion: 0.30 }
 ```
 
-然后用下面的命令确认插件已挂载：
+然后用下面的命令确认插件已挂载（插件树中应出现 `# == ...cordis.patch.yml` 段落的 `id: billing`）：
 
 ```sh
 dsh --profile <你的profile> --dump-config   # 插件树中应出现 id: billing
 ```
 
-### 配置字段说明
+## 一键安装（发给 AI 助手）
+
+把下面整段复制发给任意 AI 助手（Claude Code / Codex / dsh 自身），它会替你完成安装与配置（已按 102 服务器实测通过）：
+
+````markdown
+请帮我安装并配置 dsh-billing（DeepSeek Harness 实时计费插件）：
+
+1. 下载插件产物到服务器临时目录：
+   curl -LO https://github.com/imeepos/dsh-billing-plugin/releases/latest/download/dsh-billing-0.1.0.tgz
+   （如果该 URL 不可达，提示我先把 dsh-billing-0.1.0.tgz 传到这台机器再继续）
+
+2. 在 dsh profile 目录安装（例如 headless profile）：
+   cd ~/.dsh/profiles/<你的profile>
+   cp /tmp/dsh-billing-0.1.0.tgz .
+   npm install ./dsh-billing-0.1.0.tgz
+   检查 ~/.dsh/profiles/<你的profile>/package.json 的 dependencies 出现
+   "dsh-billing": "file:dsh-billing-0.1.0.tgz"
+
+3. 编辑 ~/.dsh/profiles/<你的profile>/cordis.patch.yml，在末尾追加
+   （如果文件内容只是注释，把注释删掉换成下面的内容；注意必须用 insert 列表语法）：
+
+   - insert:
+       - id: billing
+         name: dsh-billing
+         config:
+           currency: CNY
+           budget: 0.05
+           prices:
+             deepseek-v4-flash:
+               offPeak: { inputPerMillion: 1.5, outputPerMillion: 4.5, cacheReadPerMillion: 0.05 }
+               peak: { inputPerMillion: 3.0, outputPerMillion: 9.0, cacheReadPerMillion: 0.10 }
+             deepseek-v4-pro:
+               offPeak: { inputPerMillion: 4.5, outputPerMillion: 13.5, cacheReadPerMillion: 0.15 }
+               peak: { inputPerMillion: 9.0, outputPerMillion: 27.0, cacheReadPerMillion: 0.30 }
+
+4. 验证挂载：dsh --profile <你的profile> --dump-config
+   插件树中应出现 id: billing（来源 cordis.patch.yml）。
+
+5. 如果第 4 步报 patch: entry "billing" not found，
+   说明没写进 insert 列表，回到第 3 步检查。
+   任何一步失败，把完整报错贴给我，我会修复后重试。
+````
+
+## 配置字段说明
 
 | 字段 | 默认值 | 含义 |
 |---|---|---|

@@ -1,28 +1,29 @@
-# dsh-billing 挂载示例 —— 加到任意 profile 的 cordis.patch.yml 或你自己的 cordis.yml
+# dsh-billing 挂载示例 —— 追加到任意 profile 的 cordis.patch.yml（注意：必须用 insert 列表）
 # 价格表：DeepSeek 官方峰谷价格（2026-08-17 00:00 北京时间生效）
-- id: billing
-  name: dsh-billing
-  config:
-      currency: CNY
-      budget: 0.05                      # 每 session 预算：仅作为账单字段供 UI 展示，不注入上下文
-      prices:
-        deepseek-v4-flash:
-          offPeak:                      # 空闲时段：价格为高峰的一半
-            inputPerMillion: 1.5        #   缓存未命中输入
-            outputPerMillion: 4.5       #   输出
-            cacheReadPerMillion: 0.05   #   缓存命中输入
-          peak:                         # 高峰：北京时间 09-12、14-18
-            inputPerMillion: 3.0
-            outputPerMillion: 9.0
-            cacheReadPerMillion: 0.10
-        deepseek-v4-pro:
-          offPeak:
-            inputPerMillion: 4.5
-            outputPerMillion: 13.5
-            cacheReadPerMillion: 0.15
-          peak:
-            inputPerMillion: 9.0
-            outputPerMillion: 27.0
-            cacheReadPerMillion: 0.30
-      # peakWindows: [[9, 12], [14, 18]]   # 峰谷窗口（默认即此）
-      # utcOffsetMinutes: 480              # 北京时间 UTC+8（默认即此）
+- insert:
+    - id: billing
+      name: dsh-billing
+      config:
+          currency: CNY
+          budget: 0.05                      # 每 session 预算：仅作为账单字段供 UI 展示，不注入上下文
+          prices:
+            deepseek-v4-flash:
+              offPeak:                      # 空闲时段：价格为高峰的一半
+                inputPerMillion: 1.5        #   缓存未命中输入
+                outputPerMillion: 4.5       #   输出
+                cacheReadPerMillion: 0.05   #   缓存命中输入
+              peak:                         # 高峰：北京时间 09-12、14-18
+                inputPerMillion: 3.0
+                outputPerMillion: 9.0
+                cacheReadPerMillion: 0.10
+            deepseek-v4-pro:
+              offPeak:
+                inputPerMillion: 4.5
+                outputPerMillion: 13.5
+                cacheReadPerMillion: 0.15
+              peak:
+                inputPerMillion: 9.0
+                outputPerMillion: 27.0
+                cacheReadPerMillion: 0.30
+          # peakWindows: [[9, 12], [14, 18]]   # 峰谷窗口（默认即此）
+          # utcOffsetMinutes: 480              # 北京时间 UTC+8（默认即此）
