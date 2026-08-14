@@ -6,14 +6,16 @@ Companion code of the book 《深入拆解 DeepSeek Harness》: an event-sourced
 
 ## Installation
 
+Download the packaged artifact from GitHub Releases (it contains only the built `lib/` — no source build required), then install it into your dsh deployment:
+
 ```sh
-git clone <this-repo-url> billing-plugin
-cd billing-plugin
-npm install
-npm run build          # emits lib/
-npm run build:client   # emits lib/client.js (web gauge)
-npm test               # optional: 21 tests verify the environment
+# 1. Download the release artifact (replace v0.1.0 with the latest version)
+curl -LO https://github.com/imeepos/dsh-billing-plugin/releases/latest/download/dsh-billing-0.1.0.tgz
+# 2. Install into the dsh deployment directory (writes the dependency so the cordis loader resolves the plugin)
+npm install ./dsh-billing-0.1.0.tgz
 ```
+
+> Installing from source (development): `git clone <repo-url> && cd billing-plugin && npm install && npm run build && npm run build:client && npm install <path>/dsh-billing-0.1.0.tgz`
 
 ## Configuration
 

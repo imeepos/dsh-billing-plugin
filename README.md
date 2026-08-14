@@ -6,14 +6,16 @@
 
 ## 安装
 
+从 GitHub Releases 下载打包产物（仅含 `lib/` 构建产物，无需源码构建），安装到 dsh 部署目录：
+
 ```sh
-git clone <本仓库地址> billing-plugin
-cd billing-plugin
-npm install
-npm run build          # 产出 lib/
-npm run build:client   # 产出 lib/client.js（Web 端悬浮仪表）
-npm test               # 可选：21 个测试验证环境
+# 1. 下载 release 产物（请把 v0.1.0 换成最新版本号）
+curl -LO https://github.com/imeepos/dsh-billing-plugin/releases/latest/download/dsh-billing-0.1.0.tgz
+# 2. 在 dsh 部署目录安装（写入依赖，cordis 加载器即可解析到该插件）
+npm install ./dsh-billing-0.1.0.tgz
 ```
+
+> 从源码安装（开发用途）：`git clone <本仓库地址> && cd billing-plugin && npm install && npm run build && npm run build:client && npm install <路径>/dsh-billing-0.1.0.tgz`
 
 ## 配置
 
