@@ -6,9 +6,12 @@
  * reload identically. Pricing is time-segmented: each call is priced by the
  * peak or off-peak bucket of its logged time (Beijing clock by default), so
  * the bucket itself is a pure function of the log plus the deployment policy.
- * The plugin ships three roles — a Service (ctx.billing), a model-visible
- * Consumer tool (`billing_status`), and a Policy guard that rejects further
- * steps once a configured budget is exhausted.
+ *
+ * The plugin is deliberately statistics-only: it provides the `ctx.billing`
+ * service and injects nothing into the model context — no model tools, no
+ * prompt sections, no chat messages. The companion UI plugin (billing-ui-float)
+ * renders the bill in the web client, so spend visibility lives on the UI
+ * surface and the model context stays clean.
  *
  * This is the standalone companion code of 《深入拆解 DeepSeek Harness》
  * (deepseek-harness-book/billing-plugin) — it is deliberately NOT part of the
@@ -18,16 +21,22 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { MessageSource, TokenUsage } from '@deepseek-ai/dsh-llm'
-import type { Session } from '@deepseek-ai/dsh-session'
-import { defineTool } from '@deepseek-ai/dsh-tools'
+import type { TokenUsage } from '@deepseek-ai/dsh-llm'
+import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { emptyBillingFoldState, applyBillingEvent } from './fold.ts'
 import type { BillingFoldState } from './fold.ts'
 import { priceCall, DEFAULT_PEAK_WINDOWS, DEFAULT_UTC_OFFSET } from './pricing.ts'
 import type { Bill, BucketTotals, Config, ModelPrice, PricingPolicy } from './types.ts'
 import type { BillModelRow } from './types.ts'
+import {
+  initBillingProjectionState, applyBillingProjection, viewBillingProjection, billingProjectionSchema,
+} from './projection.ts'
+import type { BillingProjectionState, BillingProjectionValue } from './projection.ts'
+// Force NodeNext resolution of the merge outlet before augmenting it.
+import type {} from '@deepseek-ai/dsh-session-projection/types'
+// Pull the package root's `Context.sessionProjections` augmentation (the /types
+// outlet is pure types by design and carries no module declaration).
+import type {} from '@deepseek-ai/dsh-session-projection'
 
 export type * from './types.ts'
 export {
@@ -36,10 +45,20 @@ export {
 } from './pricing.ts'
 export { emptyBillingFoldState, applyBillingEvent } from './fold.ts'
 export type { BillingFoldState } from './fold.ts'
+export {
+  initBillingProjectionState, applyBillingProjection, viewBillingProjection, billingProjectionSchema,
+} from './projection.ts'
+export type { BillingProjectionState, BillingProjectionValue } from './projection.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
     billing: BillingService
+  }
+}
+
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionMap {
+    billing: BillingProjectionValue
   }
 }
 
@@ -51,14 +70,6 @@ function roundCost(value: number): number {
 /** Sort per-model rows by descending cost, then model id, for a stable display order. */
 function sortRows(rows: BillModelRow[]): BillModelRow[] {
   return [...rows].sort((a, b) => b.cost - a.cost || a.model.localeCompare(b.model))
-}
-
-/** The source stamped on the durable budget notice the guard appends. */
-const BUDGET_NOTICE_SOURCE: MessageSource = {
-  kind: 'plugin',
-  plugin: 'dsh-billing',
-  form: 'notice',
-  summary: 'billing budget exhausted',
 }
 
 /** The bucket-price schema shared by the peak and off-peak buckets. */
@@ -84,8 +95,6 @@ function resolvePeakWindows(windows: RawPeakWindow): RawPeakWindow {
 
 /** Replay owner: one incremental fold per live session, caught up on demand. */
 export class BillingService extends Service {
-  static inject = ['tools']
-
   /** Schemastery-validated deployment policy; see {@link Config}. */
   static Config: z<Config> = z.object({
     currency: z.string().default('CNY'),
@@ -103,7 +112,6 @@ export class BillingService extends Service {
   private readonly policy: PricingPolicy
   private readonly budget: number | undefined
   private readonly states = new WeakMap<Session, { consumed: number; state: BillingFoldState }>()
-  private readonly notified = new WeakSet<Session>()
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'billing')
@@ -131,110 +139,23 @@ export class BillingService extends Service {
       if (this.states.has(session)) this._sync(session)
     })
 
-    // Consumer role: the model can read its own real-time spend. The answer
-    // is derived from logged usage events and their logged times, so
-    // "model-visible ⟺ logged" holds by construction — the tool never needs
-    // to log anything extra to be honest, because every number it reports is
-    // a function of the log.
-    ctx.tools.register(defineTool({
-      name: 'billing_status',
-      description: 'Read the real-time spend of the current session: token counts and '
-        + 'estimated cost per model, plus remaining budget when one is configured. The bill '
-        + 'replays the session log, so it is always current. Prices are time-segmented: each '
-        + 'call is charged the peak or off-peak rate of its own call time (Beijing clock by '
-        + 'default). Use it to monitor cost during long tasks and to confirm when a '
-        + 'configured budget is nearly exhausted.',
-      parameters: {},
-      output: {
-        schema: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            currency: { type: 'string', required: true },
-            calls: { type: 'integer', required: true },
-            inputTokens: { type: 'integer', required: true },
-            outputTokens: { type: 'integer', required: true },
-            cacheReadTokens: { type: 'integer', required: true },
-            cacheWriteTokens: { type: 'integer', required: true },
-            cost: { type: 'number', required: true },
-            budget: { type: 'number' },
-            remaining: { type: 'number' },
-            exhausted: { type: 'boolean', required: true },
-            byBucket: {
-              type: 'object',
-              required: true,
-              additionalProperties: false,
-              properties: {
-                peak: {
-                  type: 'object',
-                  required: true,
-                  additionalProperties: false,
-                  properties: {
-                    calls: { type: 'integer', required: true },
-                    inputTokens: { type: 'integer', required: true },
-                    outputTokens: { type: 'integer', required: true },
-                    cacheReadTokens: { type: 'integer', required: true },
-                    cacheWriteTokens: { type: 'integer', required: true },
-                    cost: { type: 'number', required: true },
-                  },
-                },
-                offPeak: {
-                  type: 'object',
-                  required: true,
-                  additionalProperties: false,
-                  properties: {
-                    calls: { type: 'integer', required: true },
-                    inputTokens: { type: 'integer', required: true },
-                    outputTokens: { type: 'integer', required: true },
-                    cacheReadTokens: { type: 'integer', required: true },
-                    cacheWriteTokens: { type: 'integer', required: true },
-                    cost: { type: 'number', required: true },
-                  },
-                },
-              },
-            },
-            byModel: {
-              type: 'array',
-              required: true,
-              items: {
-                type: 'object',
-                additionalProperties: false,
-                properties: {
-                  model: { type: 'string', required: true },
-                  calls: { type: 'integer', required: true },
-                  inputTokens: { type: 'integer', required: true },
-                  outputTokens: { type: 'integer', required: true },
-                  cacheReadTokens: { type: 'integer', required: true },
-                  cacheWriteTokens: { type: 'integer', required: true },
-                  cost: { type: 'number', required: true },
-                },
-              },
-            },
-          },
-        },
-        render: (_args, value: Bill) => [{
-          type: 'text',
-          text: `Billing: ${value.calls} call(s), ${value.cost} ${value.currency} `
-            + `(in ${value.inputTokens} / out ${value.outputTokens} / cache-read ${value.cacheReadTokens} `
-            + `/ cache-write ${value.cacheWriteTokens} tokens; `
-            + `peak ${value.byBucket.peak.calls} call(s) ${value.byBucket.peak.cost} / `
-            + `off-peak ${value.byBucket.offPeak.calls} call(s) ${value.byBucket.offPeak.cost})`
-            + (value.budget === undefined
-              ? ''
-              : ` — budget ${value.budget} ${value.currency}, remaining ${value.remaining} ${value.currency}, `
-                + (value.exhausted ? 'EXHAUSTED' : 'available')),
-        }],
-      },
-      execute: (_args, exec) => {
-        if (!exec.agent) {
-          throw new Error('billing_status requires an owning agent session')
-        }
-        return Promise.resolve(this.spend(exec.agent.session))
-      },
-      presentCall: () => ({ card: 'generic', title: 'Check billing status', kind: 'other', rawInput: {} }),
-    }))
-
-    this.installBudgetGuard(ctx)
+    // Push the bill to the web client through the official projection channel:
+    // the schema-validated `billing` value lands in the client's
+    // projectionValues, so the companion UI renders it with zero RPC and zero
+    // model-context injection. `ctx.inject` (not a constructor-time ctx.get
+    // probe — plugin application is fiber-scheduled, so an earlier tree entry's
+    // service is not guaranteed visible yet) re-runs when the registry arrives
+    // and keeps headless assemblies without it unaffected.
+    ctx.inject(['sessionProjections'], (projectionCtx) => {
+      projectionCtx.sessionProjections.register({
+        key: 'billing',
+        schema: billingProjectionSchema,
+        init: initBillingProjectionState,
+        apply: (state: BillingProjectionState, event: SessionEvent) => applyBillingProjection(state, event, this.policy),
+        view: (state: BillingProjectionState) => viewBillingProjection(state, this.currency, this.budget),
+        stateVersion: 1,
+      })
+    })
   }
 
   /**
@@ -278,28 +199,6 @@ export class BillingService extends Service {
         : { budget: this.budget, remaining: roundCost(this.budget - cost) },
       exhausted: this.budget !== undefined && cost >= this.budget,
     }
-  }
-
-  /** Policy role: stop the loop once a configured budget is exhausted. */
-  private installBudgetGuard(ctx: Context): void {
-    if (this.budget === undefined) return
-    ctx.on('agent/pre-step', async ({ agent }, next): Promise<PreStepDecision> => {
-      const bill = this.spend(agent.session)
-      if (!bill.exhausted) return next()
-      if (!this.notified.has(agent.session)) {
-        this.notified.add(agent.session)
-        agent.session.append('user/message', createUserMessage({
-          content: [{
-            type: 'text',
-            text: `Billing budget exhausted: this session spent ${bill.cost} ${this.currency} `
-              + `against a ${bill.budget} ${this.currency} budget. Further model calls are blocked `
-              + 'until a higher billing.budget is configured in cordis.yml or a new session starts.',
-          }],
-          source: BUDGET_NOTICE_SOURCE,
-        }), { surfaceOp: 'append' })
-      }
-      return { kind: 'reject' }
-    })
   }
 
   /** Advance one session's fold to the current durable tail. */
