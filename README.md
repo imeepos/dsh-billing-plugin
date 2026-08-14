@@ -9,15 +9,15 @@
 从 GitHub Releases 下载打包产物（仅含 `lib/` 构建产物，无需源码构建），安装到 dsh 部署目录：
 
 ```sh
-# 1. 下载 release 产物（请把 v0.1.0 换成最新版本号）
-curl -LO https://github.com/imeepos/dsh-billing-plugin/releases/latest/download/dsh-billing-0.1.0.tgz
+# 1. 下载 release 产物（请把 v0.2.0 换成最新版本号）
+curl -LO https://github.com/imeepos/dsh-billing-plugin/releases/latest/download/dsh-billing-0.2.0.tgz
 # 2. 在 dsh 部署目录安装（写入依赖，cordis 加载器即可解析到该插件）
-npm install ./dsh-billing-0.1.0.tgz
+npm install ./dsh-billing-0.2.0.tgz
 ```
 
 > 注意：目标机器连不上 GitHub 时（如国内网络），可先从可达机器把 tarball 传过去，安装本身只依赖本地文件。
 
-> 从源码安装（开发用途）：`git clone <本仓库地址> && cd billing-plugin && npm install && npm run build && npm run build:client && npm install <路径>/dsh-billing-0.1.0.tgz`
+> 从源码安装（开发用途）：`git clone <本仓库地址> && cd billing-plugin && npm install && npm run build && npm run build:client && npm install <路径>/dsh-billing-0.2.0.tgz`
 
 ## 配置
 
@@ -55,15 +55,15 @@ dsh --profile <你的profile> --dump-config   # 插件树中应出现 id: billin
 请帮我安装并配置 dsh-billing（DeepSeek Harness 实时计费插件），profile 为 web：
 
 1. 下载插件产物到服务器临时目录：
-   curl -LO https://github.com/imeepos/dsh-billing-plugin/releases/latest/download/dsh-billing-0.1.0.tgz
-   （如果该 URL 不可达，提示我先把 dsh-billing-0.1.0.tgz 传到这台机器再继续）
+   curl -LO https://github.com/imeepos/dsh-billing-plugin/releases/latest/download/dsh-billing-0.2.0.tgz
+   （如果该 URL 不可达，提示我先把 dsh-billing-0.2.0.tgz 传到这台机器再继续）
 
 2. 在 web profile 目录安装：
    cd ~/.dsh/profiles/web
-   cp /tmp/dsh-billing-0.1.0.tgz .
-   npm install ./dsh-billing-0.1.0.tgz
+   cp /tmp/dsh-billing-0.2.0.tgz .
+   npm install ./dsh-billing-0.2.0.tgz
    检查 ~/.dsh/profiles/web/package.json 的 dependencies 出现
-   "dsh-billing": "file:dsh-billing-0.1.0.tgz"
+   "dsh-billing": "file:dsh-billing-0.2.0.tgz"
 
 3. 编辑 ~/.dsh/profiles/web/cordis.patch.yml，在末尾追加
    （如果文件内容只是注释，把注释删掉换成下面的内容；注意必须用 insert 列表语法）：

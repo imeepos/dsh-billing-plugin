@@ -9,15 +9,15 @@ Companion code of the book 《深入拆解 DeepSeek Harness》: an event-sourced
 Download the packaged artifact from GitHub Releases (it contains only the built `lib/` — no source build required), then install it into your dsh deployment:
 
 ```sh
-# 1. Download the release artifact (replace v0.1.0 with the latest version)
-curl -LO https://github.com/imeepos/dsh-billing-plugin/releases/latest/download/dsh-billing-0.1.0.tgz
+# 1. Download the release artifact (replace v0.2.0 with the latest version)
+curl -LO https://github.com/imeepos/dsh-billing-plugin/releases/latest/download/dsh-billing-0.2.0.tgz
 # 2. Install into the dsh deployment directory (writes the dependency so the cordis loader resolves the plugin)
-npm install ./dsh-billing-0.1.0.tgz
+npm install ./dsh-billing-0.2.0.tgz
 ```
 
 > Note: if GitHub is unreachable from the target machine (e.g. behind the GFW), copy the tarball from a machine that can reach it instead — the install step itself only needs the local file.
 
-> Installing from source (development): `git clone <repo-url> && cd billing-plugin && npm install && npm run build && npm run build:client && npm install <path>/dsh-billing-0.1.0.tgz`
+> Installing from source (development): `git clone <repo-url> && cd billing-plugin && npm install && npm run build && npm run build:client && npm install <path>/dsh-billing-0.2.0.tgz`
 
 ## Configuration
 
@@ -55,15 +55,15 @@ Copy the whole block below to any AI assistant (Claude Code / Codex / dsh itself
 Please install and configure dsh-billing (the DeepSeek Harness real-time billing plugin):
 
 1. Download the plugin artifact to a temp dir on the target machine:
-   curl -LO https://github.com/imeepos/dsh-billing-plugin/releases/latest/download/dsh-billing-0.1.0.tgz
-   (If this URL is unreachable, ask me to transfer dsh-billing-0.1.0.tgz to the machine first)
+   curl -LO https://github.com/imeepos/dsh-billing-plugin/releases/latest/download/dsh-billing-0.2.0.tgz
+   (If this URL is unreachable, ask me to transfer dsh-billing-0.2.0.tgz to the machine first)
 
 2. Install into the web profile directory:
    cd ~/.dsh/profiles/web
-   cp /tmp/dsh-billing-0.1.0.tgz .
-   npm install ./dsh-billing-0.1.0.tgz
+   cp /tmp/dsh-billing-0.2.0.tgz .
+   npm install ./dsh-billing-0.2.0.tgz
    Check that ~/.dsh/profiles/web/package.json now has
-   "dsh-billing": "file:dsh-billing-0.1.0.tgz" in dependencies.
+   "dsh-billing": "file:dsh-billing-0.2.0.tgz" in dependencies.
 
 3. Edit ~/.dsh/profiles/web/cordis.patch.yml and append
    (if the file only contains comments, replace them with the block below;
